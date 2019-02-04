@@ -52,8 +52,9 @@ ui <- navbarPage(
                                choices = "", selected = ""),
                    selectInput("Data_menu", label = "Data available",
                                choices = "", selected = ""),
-                   h4("Available data:"),
-                   textOutput(outputId="Data")
+                   # h4("Available data:"),
+                   # textOutput(outputId="Data"),
+                   plotOutput(outputId = "climate")
                    ),
 
       mainPanel(width = 10,
@@ -148,6 +149,21 @@ output$histo <- renderPlot({
     
 })
 
+
+output$climate <- renderPlot({
+    clean_data %>% 
+        ggplot() +
+        geom_point(aes(x=Temp, y=Prec), color="steelblue", alpha = 0.7, size =3.5) +
+        geom_point(data=filteredData(), aes(x=Temp, y=Prec), color="red", size=5, alpha = 0.8) +
+        scale_y_continuous(breaks= pretty_breaks()) +
+        ylab("Precipitation") + xlab("Temperature") +
+        theme_light() + 
+        theme(axis.text = element_text(size=10),
+              axis.title = element_text(size=12),
+              panel.grid.major.y = element_blank(),
+              panel.border = element_blank(),
+              axis.ticks.y = element_blank())
+}) 
 
 
 output$mymap <- renderLeaflet({
