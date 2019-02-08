@@ -15,6 +15,7 @@ library(forcats)
 library(leaflet)
 library(readr)
 library(scales)
+library(plotbiomes)
 
 
 # Load the dataset
@@ -29,6 +30,9 @@ all_countries <- c("All",sort(unique(clean_data$Country)))
 
 PAGE_TITLE = "CLIMo: Climate-smart forestry in mountain regions"
 # Define UI for application that draws a histogram
+
+
+
 ui <- navbarPage(
            titlePanel(windowTitle = PAGE_TITLE,
                       title = div(img(src = "cropped-Untitled-1.png", 
@@ -42,9 +46,9 @@ ui <- navbarPage(
        
 
   ## First tab: Interactive map             
-  tabPanel("Interactive Map", 
+  
     sidebarLayout(
-      sidebarPanel(width= 2,
+      sidebarPanel(width= 3,
                    h4("Select input data"),
                    selectInput("Country", label = "Country",
                                choices = all_countries),
@@ -57,37 +61,25 @@ ui <- navbarPage(
                    plotOutput(outputId = "climate")
                    ),
 
-      mainPanel(width = 10,
-                leafletOutput(outputId = "mymap", height =800)
-                # DT::dataTableOutput("mytable")
+      mainPanel(width = 9,
+                tabsetPanel(
+                    tabPanel("Interactive Map", leafletOutput(outputId = "mymap", height =800)),
+                    tabPanel("Explore the data available", 
+                             div(DT::dataTableOutput("exttable"), style = "font-size:90%")),
+                    tabPanel("Some statistics", 
+                             fluidPage(
+                                 fluidRow(column(width = 5, plotOutput(outputId = "species_dist")),
+                                          column(width = 5, plotOutput(outputId = "elev_hist"))),
+                                 fluidRow(column(width = 5, plotOutput(outputId = "countries_dist")),
+                                          column(width = 5, plotOutput(outputId = "year_hist"))
+                                 )
+                             )
+                    )
                 )
       )
-    ),
-  
-  tabPanel("Explore the data available", 
-    div(DT::dataTableOutput("exttable"), style = "font-size:90%")),
-  
-  tabPanel("Some statistics", 
-    fluidPage(
-      fluidRow(
-        column(width = 2, 
-               h4("Select input data"),
-               selectInput("Country2", label = "Country",
-                           choices = all_countries)),
-        column(width = 5, plotOutput(outputId = "species_dist")),
-        column(width = 5, plotOutput(outputId = "elev_country_hist"))),
-      fluidRow(
-        column(width = 2, 
-               h4("Select input data"),
-               selectInput("Species2", label = "Species",
-                           choices = all_species)),
-        column(width = 5, plotOutput(outputId = "countries_dist")),
-        column(width = 5, plotOutput(outputId = "elev_species_hist"))
-      )
     )
-  )
 )
-
+      
 
    # # Application title
    # h3("Long-term research plots established in Europe for the study of mountain forest dynamics and management"),
@@ -127,7 +119,7 @@ server <- function(input, output, session) {
    clean_data %>%
      filter(if (input$Country == "All") Country %in% all_countries else Country == input$Country,
             if (input$Species == "All") Species != "All" else grepl(input$Species,Species),
-            if (input$Data_menu == "All") Data != "All" else grepl(input$Data_menu,Data))
+            if (input$Data_menu == "All") Data != "All" else grepl(input$Data_menu,Data)) 
  })
  
 
@@ -153,12 +145,32 @@ output$histo <- renderPlot({
 output$climate <- renderPlot({
     clean_data %>% 
         ggplot() +
-        geom_point(aes(x=Temp, y=Prec), color="steelblue", alpha = 0.7, size =3.5) +
-        geom_point(data=filteredData(), aes(x=Temp, y=Prec), color="red", size=5, alpha = 0.8) +
+        # geom_polygon(data = Whittaker_biomes,
+        #              aes(x    = temp_c,
+        #                  y    = precp_cm,
+        #                  fill = biome),
+        #              # adjust polygon borders
+        #              colour = "gray98",
+        #              size   = 1) +
+        
+        geom_point(aes(x=Temp, y=Prec), color="steelblue", size   = 3,
+                   shape  = 21,  colour = "gray95",  fill   = "steelblue",   stroke = 1,
+                   alpha  = 0.5) +
+        geom_point(data=filteredData(), aes(x=Temp, y=Prec), color="red", size=4, alpha = 0.7) +
         scale_y_continuous(breaks= pretty_breaks()) +
-        ylab("Precipitation") + xlab("Temperature") +
+        scale_fill_manual(name   = "Whittaker biomes",
+                          breaks = names(Ricklefs_colors),
+                          labels = names(Ricklefs_colors),
+                          values = Ricklefs_colors) +
+        ylab("Precipitation (mm)") + xlab("Temperature (ºC)") +
         theme_light() + 
-        theme(axis.text = element_text(size=10),
+        theme(legend.justification = c(0, 1), # pick the upper left corner of the legend box and
+              legend.position = c(0, 1), # adjust the position of the corner as relative to axis
+              legend.background = element_rect(fill = NA), # transparent legend background
+              legend.box = "horizontal", # horizontal arrangement of multiple legends
+              legend.spacing.x = unit(0.5, units = "cm"), # horizontal spacing between legends
+              panel.grid = element_blank(),
+              axis.text = element_text(size=10),
               axis.title = element_text(size=12),
               panel.grid.major.y = element_blank(),
               panel.border = element_blank(),
@@ -184,9 +196,13 @@ output$mymap <- renderLeaflet({
                         popup = ~paste0(
                  "<b>Country: </b>",filteredData()$Country,"</br>",
                  "<b>Species: </b>", "<i>",filteredData()$Species,"</i>", "</br>",
-                "<b>Data: </b>", filteredData()$Data, "</br>",
+                "<b>Data: </b>", unique(filteredData()$Data), "</br>",
+                "<b>Year of establishment: </b>", filteredData()$Ini_year," m a.s.l.","</br>",
+                
                 "<b>Elevation: </b>", filteredData()$Elevation," m a.s.l.","</br>",
-                 "<b>Forest Type: </b>",filteredData()$Structure," (",filteredData()$Age," yr.)","</br>",
+                "<b>MAT: </b>", filteredData()$Temp," ºC","</br>",
+                "<b>MAP: </b>", filteredData()$Prec," mm","</br>",
+                "<b>Forest Type: </b>",filteredData()$Structure," (",filteredData()$Age," yr.)","</br>",
                  "<b>Institution: </b>",'<a href="',filteredData()$Website, '">',
                 filteredData()$Organisation,"</a>","</br>",
                  "<b>Responsible: </b>",filteredData()$Responsible,' (<a href="mailto:',filteredData()$Mail, '">',
@@ -196,39 +212,20 @@ output$mymap <- renderLeaflet({
                 options=list(maxZoom = 6))
   })
   
-  output$mytable = DT::renderDataTable({
-      filteredData() %>%
-      select(Country, Species, Organisation, Responsible)
-      }, escape = FALSE)
-    
+
   output$exttable = DT::renderDataTable({
       filteredData() %>%
           mutate(Responsible = paste0(Responsible,' (<a href="mailto:',Mail,'">',
              Mail,"</a>)")) %>%
-      dplyr::select(Country, Name, Year, Species, Temp, Prec, Structure, "Stand Age" = Age, Elevation, 
+      dplyr::select(Country, Name, Ini_year, Species, Temp, Prec, Structure, "Stand Age" = Age, Min_elev, Max_elev, 
              Data, Responsible, Organisation)
   }, escape = FALSE, options = list(pageLength = 50))
   
 ############## Third panel ###
 
-  filteredCountry <- reactive({
-  if (input$Country2 == "All") {
-    clean_data 
-  } else {
-      clean_data %>%
-        filter(Country == input$Country2)}
-  })
-  
-  filteredSpecies <- reactive({
-  if (input$Species2 == "All") {
-    clean_data 
-  } else {
-      clean_data %>%
-        filter(grepl(input$Species2,Species))}
-  })
-  
+
   output$species_dist <- renderPlot({
-      hey <- data.frame(Species=factor(filteredCountry() %>%
+      hey <- data.frame(Species=factor(filteredData() %>%
           pull(Species) %>%
           strsplit(split = ";.") %>%
           unlist()))
@@ -253,7 +250,7 @@ output$mymap <- renderLeaflet({
     })  
   
   output$countries_dist <- renderPlot({
-      filteredSpecies() %>%
+      filteredData() %>%
       count(Country) %>%
       arrange(n) %>%
       mutate(Country = factor(Country, Country)) %>%
@@ -272,21 +269,21 @@ output$mymap <- renderLeaflet({
             axis.ticks.y = element_blank())
     }) 
     
-  output$elev_country_hist <- renderPlot({  
-    filteredCountry() %>% 
+  output$elev_hist <- renderPlot({  
+      filteredData() %>% 
       ggplot()+
       geom_histogram(aes(Elevation), fill= "steelblue") +
-      theme_bw() +
+      theme_bw() + xlab("Elevation")+ 
       ylab("Number of plots") +
       theme(axis.text = element_text(size=10),
             axis.title = element_text(size=12))
       })
     
-   output$elev_species_hist <- renderPlot({  
-    filteredSpecies() %>% 
+   output$year_hist <- renderPlot({  
+       filteredData() %>% 
       ggplot()+
-      geom_histogram(aes(Elevation), fill="dark green") +
-       theme_bw() +
+      geom_histogram(aes(Ini_year), fill="dark green") +
+       theme_bw() + xlab("Year of establishment")+ 
        ylab("Number of plots") +
        theme(axis.text = element_text(size=10),
              axis.title = element_text(size=12))
